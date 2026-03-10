@@ -1,35 +1,88 @@
 import { useMemo, useState } from "react";
 import {
-  ChevronLeft,
-  ChevronRight,
-  CheckCircle2,
-  UserRound,
+  ShieldCheck,
+  Contact,
   Paperclip,
-  Radio,
-  X,
+  CalendarClock,
   Copy,
   ExternalLink,
-  RefreshCcw
+  RefreshCcw,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
-import AccordionCard from "./components/AccordionCard";
+import CustomerPanel  from "./components/CustomerPanel";
+import AttachmentPanel from "./components/AttachmentPanel";
+import SchedulingPanel from "./components/SchedulingPanel";
+import ValidatorPanel  from "./components/ValidatorPanel";
 import { appConfig, buildUrl } from "./services/config";
-import { useAppData } from "./hooks/useAppData";
+import { useAppData }  from "./hooks/useAppData";
+
+const NAV_TABS = [
+  { id: "validador",   label: "Validador",      Icon: ShieldCheck   },
+  { id: "cliente",     label: "Dados do cliente", Icon: Contact      },
+  { id: "anexo",       label: "Anexos",          Icon: Paperclip    },
+  { id: "agendamento", label: "Agendamento",     Icon: CalendarClock },
+];
+
+/* ─── Shared protocol bar rendered at the top of every panel ─── */
+function ProtocolBar({ protocol, crmLabel, onCopy }) {
+  return (
+    <div
+      className="flex-shrink-0 flex items-center justify-between px-4 py-2.5"
+      style={{
+        background: "var(--bp-blue-bg)",
+        borderBottom: "1px solid var(--bp-blue-border)",
+      }}
+    >
+      <div className="flex flex-col leading-tight">
+        <span
+          className="text-[9px] font-bold uppercase tracking-widest"
+          style={{ color: "var(--bp-gray)" }}
+        >
+          Protocolo
+        </span>
+        {crmLabel && (
+          <a
+            href="#"
+            className="flex items-center gap-1 text-[10px] font-semibold hover:underline mt-0.5"
+            style={{ color: "var(--bp-blue)" }}
+          >
+            {crmLabel}
+            <ExternalLink style={{ width: 10, height: 10 }} />
+          </a>
+        )}
+      </div>
+
+      <button
+        onClick={onCopy}
+        title="Copiar protocolo"
+        className="group flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 transition-all"
+        style={{
+          background: "var(--bp-white)",
+          border: "1px solid var(--bp-blue-border)",
+        }}
+        onMouseEnter={e => e.currentTarget.style.borderColor = "var(--bp-blue)"}
+        onMouseLeave={e => e.currentTarget.style.borderColor = "var(--bp-blue-border)"}
+      >
+        <span className="text-sm font-extrabold" style={{ color: "var(--bp-blue)" }}>
+          {protocol || "···"}
+        </span>
+        <Copy
+          className="transition-opacity opacity-0 group-hover:opacity-100"
+          style={{ width: 12, height: 12, color: "var(--bp-gray)" }}
+        />
+      </button>
+    </div>
+  );
+}
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [openItems, setOpenItems] = useState(["agendamento"]);
+  const [activeTab, setActiveTab]     = useState("agendamento");
 
   const {
-    loading,
-    uploading,
-    protocol,
-    crmLabel,
-    customer,
-    schedule,
-    attachments,
-    error,
-    reload,
-    upload
+    loading, uploading, protocol, crmLabel,
+    customer, schedule, attachments, error, reload, upload,
   } = useAppData();
 
   const validatorSrc = useMemo(
@@ -37,56 +90,24 @@ export default function App() {
     []
   );
 
-  const modules = useMemo(
-    () => [
-      {
-        id: "validador",
-        title: "Validador",
-        icon: CheckCircle2,
-        type: "iframe",
-        src: validatorSrc
-      },
-      {
-        id: "cliente",
-        title: "Dados do cliente",
-        icon: UserRound,
-        type: "content"
-      },
-      {
-        id: "anexo",
-        title: "Anexo",
-        icon: Paperclip,
-        type: "content"
-      },
-      {
-        id: "agendamento",
-        title: "Agendamento",
-        icon: Radio,
-        type: "content"
-      }
-    ],
-    [validatorSrc]
-  );
-
-  const toggleItem = (id) => {
-    setOpenItems((current) =>
-      current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id]
-    );
-  };
-
   const copyProtocol = async () => {
     if (!protocol) return;
-    try {
-      await navigator.clipboard.writeText(protocol);
-    } catch (error) {
-      console.error("Falha ao copiar protocolo", error);
-    }
+    try { await navigator.clipboard.writeText(protocol); } catch {}
   };
 
+  const handleTabClick = (id) => {
+    if (activeTab === id && sidebarOpen) setSidebarOpen(false);
+    else { setActiveTab(id); setSidebarOpen(true); }
+  };
+
+  const activeTabMeta = NAV_TABS.find(t => t.id === activeTab);
+
   return (
-    <div className="relative flex h-dvh overflow-hidden bg-slate-100 text-slate-900">
+    <div
+      className="flex h-dvh overflow-hidden"
+      style={{ fontFamily: "'Nunito', sans-serif", background: "var(--bp-surface)" }}
+    >
+      {/* ── 1. Blip Desk iframe ── */}
       <div className="relative flex-1 overflow-hidden">
         <iframe
           id="blip-desk"
@@ -96,83 +117,156 @@ export default function App() {
           allow="camera; microphone; notifications; clipboard; cookies; geolocation; midi; encrypted-media; autoplay; vr; xr-spatial-tracking; accelerometer; gyroscope; magnetometer; payment; usb; sync-xhr; fullscreen; display-capture"
           className="h-full w-full bg-white"
         />
-
-        <button
-          onClick={() => setSidebarOpen((value) => !value)}
-          className="absolute right-3 top-3 z-20 inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white/90 px-4 py-2 text-sm font-medium text-slate-800 shadow-sm backdrop-blur transition hover:bg-white"
-        >
-          {sidebarOpen ? (
-            <ChevronRight className="h-4 w-4" />
-          ) : (
-            <ChevronLeft className="h-4 w-4" />
-          )}
-          {sidebarOpen ? "Ocultar Apps" : "Exibir Apps"}
-        </button>
       </div>
 
-      <aside
-        className={`absolute right-0 top-0 z-10 flex h-dvh w-full max-w-[420px] flex-col border-l border-slate-200 bg-[#E0E0E0] transition-transform duration-300 ease-in-out md:w-[32vw] ${
-          sidebarOpen ? "translate-x-0" : "translate-x-full"
-        }`}
+      {/* ── 2. Slide-out content panel ── */}
+      <div
+        className="flex-shrink-0 overflow-hidden transition-all duration-250 ease-in-out"
+        style={{
+          width: sidebarOpen ? "var(--panel-w)" : "0px",
+          borderLeft: sidebarOpen ? "1px solid var(--bp-border)" : "none",
+        }}
       >
-        <div className="relative mb-1 border-b border-slate-300 bg-white px-4 py-6 text-center shadow-sm">
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="absolute right-2 top-2 inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-            aria-label="Fechar painel"
+        {sidebarOpen && activeTabMeta && (
+          <div
+            key={activeTab}
+            className="panel-animate flex flex-col h-dvh overflow-hidden"
+            style={{ width: "var(--panel-w)", background: "var(--bp-white)" }}
           >
-            <X className="h-5 w-5" />
-          </button>
-
-          <button
-            onClick={reload}
-            className="absolute left-2 top-2 inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-            aria-label="Recarregar dados"
-            title="Recarregar dados"
-          >
-            <RefreshCcw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} />
-          </button>
-
-          <h1 className="text-xl font-semibold">Protocolo</h1>
-
-          <button
-            onClick={copyProtocol}
-            className="group mt-3 inline-flex items-center gap-2 text-3xl font-semibold text-sky-700 transition hover:text-sky-800"
-            title="Copiar protocolo"
-          >
-            <span>{protocol || "..."}</span>
-            <Copy className="h-5 w-5 opacity-0 transition group-hover:opacity-100" />
-          </button>
-
-          <div className="mt-3 flex items-center justify-center gap-2 text-xs text-slate-500">
-            <span>{crmLabel}</span>
-            <ExternalLink className="h-3.5 w-3.5" />
-          </div>
-
-          {error ? (
-            <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error}
+            {/* Panel title row */}
+            <div
+              className="flex-shrink-0 flex items-center gap-2.5 px-4 py-3"
+              style={{ borderBottom: "1px solid var(--bp-border)" }}
+            >
+              <activeTabMeta.Icon
+                style={{ width: 16, height: 16, color: "var(--bp-blue)", flexShrink: 0 }}
+              />
+              <span className="text-sm font-bold flex-1" style={{ color: "var(--bp-onix)" }}>
+                {activeTabMeta.label}
+              </span>
             </div>
-          ) : null}
-        </div>
 
-        <div className="flex-1 overflow-y-auto pb-4">
-          {modules.map((item) => (
-            <AccordionCard
-              key={item.id}
-              item={item}
+            {/* Protocol bar — always visible */}
+            <ProtocolBar
               protocol={protocol}
-              customer={customer}
-              schedule={schedule}
-              attachments={attachments}
-              onUpload={upload}
-              uploading={uploading}
-              open={openItems.includes(item.id)}
-              onToggle={() => toggleItem(item.id)}
+              crmLabel={crmLabel}
+              onCopy={copyProtocol}
             />
-          ))}
-        </div>
-      </aside>
+
+            {/* Error */}
+            {error && (
+              <div
+                className="mx-3 mt-2 rounded-lg px-3 py-2 text-xs font-semibold flex-shrink-0"
+                style={{ background: "#fff5f4", border: "1px solid #fcc", color: "var(--bp-warning)" }}
+              >
+                {error}
+              </div>
+            )}
+
+            {/* Panel content */}
+            <div className="flex-1 overflow-hidden" style={{ background: "var(--bp-surface)" }}>
+              {activeTab === "validador"   && <ValidatorPanel src={validatorSrc} title="Validador" />}
+              {activeTab === "cliente"     && <CustomerPanel customer={customer} />}
+              {activeTab === "anexo"       && <AttachmentPanel attachments={attachments} onUpload={upload} uploading={uploading} />}
+              {activeTab === "agendamento" && <SchedulingPanel protocol={protocol} schedule={schedule} />}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── 3. Icon nav bar ── */}
+      <nav
+        className="relative z-20 flex flex-col items-center gap-1 flex-shrink-0 py-2"
+        style={{
+          width: "var(--nav-w)",
+          background: "var(--bp-white)",
+          borderLeft: "1px solid var(--bp-border)",
+        }}
+      >
+        {/* Reload at top */}
+        <button
+          data-tooltip="Recarregar"
+          onClick={reload}
+          className="flex h-9 w-9 items-center justify-center rounded-xl transition-all mt-1 mb-1"
+          style={{ color: "var(--bp-gray)" }}
+          onMouseEnter={e => { e.currentTarget.style.background = "var(--bp-surface)"; e.currentTarget.style.color = "var(--bp-blue)"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--bp-gray)"; }}
+        >
+          <RefreshCcw
+            style={{ width: 15, height: 15 }}
+            className={loading ? "animate-spin" : ""}
+          />
+        </button>
+
+        {/* Divider */}
+        <div style={{ width: 28, height: 1, background: "var(--bp-border)", marginBottom: 4 }} />
+
+        {/* Tab icon buttons */}
+        {NAV_TABS.map(({ id, label, Icon }) => {
+          const isActive = sidebarOpen && activeTab === id;
+          return (
+            <button
+              key={id}
+              data-tooltip={label}
+              onClick={() => handleTabClick(id)}
+              className="relative flex items-center justify-center rounded-xl transition-all"
+              style={{
+                width: 40,
+                height: 40,
+                background: isActive ? "var(--bp-blue-bg)" : "transparent",
+                color: isActive ? "var(--bp-blue)" : "var(--bp-gray)",
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => {
+                if (!isActive) {
+                  e.currentTarget.style.background = "var(--bp-surface)";
+                  e.currentTarget.style.color = "var(--bp-blue)";
+                }
+              }}
+              onMouseLeave={e => {
+                if (!isActive) {
+                  e.currentTarget.style.background = "transparent";
+                  e.currentTarget.style.color = "var(--bp-gray)";
+                }
+              }}
+            >
+              {/* Active left indicator */}
+              {isActive && (
+                <span
+                  className="absolute rounded-full"
+                  style={{
+                    left: -1,
+                    top: "25%",
+                    bottom: "25%",
+                    width: 3,
+                    background: "var(--bp-blue)",
+                    borderRadius: "0 3px 3px 0",
+                  }}
+                />
+              )}
+              <Icon style={{ width: 18, height: 18 }} />
+            </button>
+          );
+        })}
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Collapse toggle */}
+        <button
+          data-tooltip={sidebarOpen ? "Recolher" : "Expandir"}
+          onClick={() => setSidebarOpen(v => !v)}
+          className="flex h-9 w-9 items-center justify-center rounded-xl transition-all mb-1"
+          style={{ color: "var(--bp-gray)" }}
+          onMouseEnter={e => { e.currentTarget.style.background = "var(--bp-surface)"; e.currentTarget.style.color = "var(--bp-blue)"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--bp-gray)"; }}
+        >
+          {sidebarOpen
+            ? <ChevronRight style={{ width: 16, height: 16 }} />
+            : <ChevronLeft  style={{ width: 16, height: 16 }} />
+          }
+        </button>
+      </nav>
     </div>
   );
 }

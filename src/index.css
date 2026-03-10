@@ -1,12 +1,66 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root {
-  height: 100%;
+:root {
+  --bp-blue:        #1A5ED4;
+  --bp-blue-hov:    #1550b8;
+  --bp-blue-bg:     #EBF2FF;
+  --bp-blue-border: #C2D6F8;
+
+  --bp-gray:        #8F8F8F;
+  --bp-surface:     #F6F6F6;
+  --bp-white:       #FFFFFF;
+  --bp-border:      #E4E4E4;
+
+  --bp-onix:        #242B36;
+  --bp-city:        #52636C;
+  --bp-warning:     #F76556;
+
+  --nav-w: 52px;
+  --panel-w: 308px;
 }
+
+html, body, #root { height: 100%; }
 
 body {
   margin: 0;
-  font-family: Inter, Arial, sans-serif;
+  font-family: 'Nunito', sans-serif;
+  color: var(--bp-onix);
+  background: var(--bp-surface);
+  -webkit-font-smoothing: antialiased;
 }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #D4D4D4; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #B0B0B0; }
+
+@keyframes panelSlide {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.panel-animate { animation: panelSlide 0.18s ease forwards; }
+
+/* Tooltip */
+[data-tooltip] { position: relative; }
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--bp-onix);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+[data-tooltip]:hover::after { opacity: 1; }
