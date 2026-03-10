@@ -77,8 +77,8 @@ function ProtocolBar({ protocol, crmLabel, onCopy }) {
 }
 
 export default function App() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [activeTab, setActiveTab]     = useState("agendamento");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab]     = useState(null);
 
   const {
     loading, uploading, protocol, crmLabel,
