@@ -1,5 +1,5 @@
 export const appConfig = {
-  deskUrl: import.meta.env.VITE_DESK_URL || "https://macro.desk.blip.ai",
+  deskUrl: import.meta.env.VITE_DESK_URL || "https://desk.blip.ai",
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL || "",
   customerEndpoint: import.meta.env.VITE_CUSTOMER_ENDPOINT || "/customer",
   scheduleEndpoint: import.meta.env.VITE_SCHEDULE_ENDPOINT || "/schedule",
