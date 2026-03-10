@@ -1,10 +1,18 @@
 export default function Field({ label, value }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3">
-      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+    <div
+      className="rounded-xl p-3"
+      style={{ border: "1px solid var(--bp-border)", background: "var(--bp-white)" }}
+    >
+      <p
+        className="text-[9px] font-bold uppercase tracking-widest mb-0.5"
+        style={{ color: "var(--bp-gray)" }}
+      >
         {label}
-      </div>
-      <div className="mt-1 text-sm text-slate-800">{value || "—"}</div>
+      </p>
+      <p className="text-sm font-semibold leading-snug" style={{ color: "var(--bp-onix)" }}>
+        {value || <span style={{ color: "#C0C0C0" }}>—</span>}
+      </p>
     </div>
   );
 }
