@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ShieldCheck,
   Contact,
@@ -7,118 +7,22 @@ import {
   Copy,
   ExternalLink,
   RefreshCcw,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
-import CustomerPanel from "./components/CustomerPanel";
+import CustomerPanel  from "./components/CustomerPanel";
 import AttachmentPanel from "./components/AttachmentPanel";
 import SchedulingPanel from "./components/SchedulingPanel";
-import ValidatorPanel from "./components/ValidatorPanel";
+import ValidatorPanel  from "./components/ValidatorPanel";
 import { appConfig, buildUrl } from "./services/config";
-import { useAppData } from "./hooks/useAppData";
+import { useAppData }  from "./hooks/useAppData";
 
 const NAV_TABS = [
-  { id: "validador", label: "Validador", Icon: ShieldCheck },
-  { id: "cliente", label: "Dados do cliente", Icon: Contact },
-  { id: "anexo", label: "Anexos", Icon: Paperclip },
-  { id: "agendamento", label: "Agendamento", Icon: CalendarClock },
+  { id: "validador",   label: "Validador",      Icon: ShieldCheck   },
+  { id: "cliente",     label: "Dados do cliente", Icon: Contact      },
+  { id: "anexo",       label: "Anexos",          Icon: Paperclip    },
+  { id: "agendamento", label: "Agendamento",     Icon: CalendarClock },
 ];
-
-const CARD_SELECTORS = [
-  "article.chat-list-item",
-  "article.ticket-list-item",
-  "article[id$='-chat-list-item']",
-  "[data-ticket-id]",
-  "[data-conversation-id]",
-  "[data-testid*='chat']",
-  "[data-testid*='ticket']",
-  "[id*='chat-list-item']",
-  "[id*='ticket-list-item']",
-  "[role='listitem']",
-];
-
-function normalizeText(value) {
-  return String(value || "").replace(/\s+/g, " ").trim();
-}
-
-function extractDigits(value) {
-  const digits = String(value || "").match(/\d{6,}/g);
-  return digits?.[0] || "";
-}
-
-function findCardElement(target) {
-  if (!(target instanceof Element)) return null;
-
-  for (const selector of CARD_SELECTORS) {
-    const found = target.closest(selector);
-    if (found) return found;
-  }
-
-  return null;
-}
-
-function extractTicketIdFromCard(cardRoot) {
-  if (!cardRoot) return "";
-
-  const directCandidates = [
-    cardRoot.getAttribute("data-ticket-id"),
-    cardRoot.getAttribute("data-conversation-id"),
-    cardRoot.getAttribute("data-id"),
-    cardRoot.id,
-    cardRoot.getAttribute("aria-label"),
-  ];
-
-  for (const candidate of directCandidates) {
-    const id = extractDigits(candidate);
-    if (id) return id;
-  }
-
-  const linkCandidates = Array.from(cardRoot.querySelectorAll("a[href]"))
-    .map((link) => link.getAttribute("href"))
-    .filter(Boolean);
-
-  for (const href of linkCandidates) {
-    const fromTicketPath = href.match(/tickets?\/(\d{6,})/i)?.[1];
-    if (fromTicketPath) return fromTicketPath;
-
-    const fromConversationPath = href.match(/conversations?\/(\d{6,})/i)?.[1];
-    if (fromConversationPath) return fromConversationPath;
-
-    const generic = extractDigits(href);
-    if (generic) return generic;
-  }
-
-  const textCandidates = [
-    cardRoot.textContent,
-    ...Array.from(cardRoot.querySelectorAll("[title], [aria-label]")).flatMap((el) => [
-      el.getAttribute("title"),
-      el.getAttribute("aria-label"),
-    ]),
-  ];
-
-  for (const candidate of textCandidates) {
-    const id = extractDigits(candidate);
-    if (id) return id;
-  }
-
-  return "";
-}
-
-function getTicketDisplayFromCard(cardRoot, ticketId) {
-  if (!cardRoot) return ticketId || "";
-
-  const titleSource =
-    cardRoot.querySelector("h1, h2, h3, h4, strong, b, [title]")?.textContent ||
-    cardRoot.getAttribute("aria-label") ||
-    cardRoot.textContent ||
-    "";
-
-  const label = normalizeText(titleSource);
-
-  if (!label) return ticketId || "";
-  if (!ticketId) return label;
-  if (label.includes(ticketId)) return label;
-
-  return `${label} • ${ticketId}`;
-}
 
 /* ─── Shared protocol bar rendered at the top of every panel ─── */
 function ProtocolBar({ protocol, crmLabel, onCopy }) {
@@ -130,23 +34,21 @@ function ProtocolBar({ protocol, crmLabel, onCopy }) {
         borderBottom: "1px solid var(--bp-blue-border)",
       }}
     >
-      <div className="flex flex-col leading-tight min-w-0">
+      <div className="flex flex-col leading-tight">
         <span
           className="text-[9px] font-bold uppercase tracking-widest"
           style={{ color: "var(--bp-gray)" }}
         >
           Protocolo
         </span>
-
         {crmLabel && (
           <a
             href="#"
-            className="flex items-center gap-1 text-[10px] font-semibold hover:underline mt-0.5 min-w-0"
+            className="flex items-center gap-1 text-[10px] font-semibold hover:underline mt-0.5"
             style={{ color: "var(--bp-blue)" }}
-            onClick={(e) => e.preventDefault()}
           >
-            <span className="truncate">{crmLabel}</span>
-            <ExternalLink style={{ width: 10, height: 10, flexShrink: 0 }} />
+            {crmLabel}
+            <ExternalLink style={{ width: 10, height: 10 }} />
           </a>
         )}
       </div>
@@ -159,17 +61,10 @@ function ProtocolBar({ protocol, crmLabel, onCopy }) {
           background: "var(--bp-white)",
           border: "1px solid var(--bp-blue-border)",
         }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.borderColor = "var(--bp-blue)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.borderColor = "var(--bp-blue-border)";
-        }}
+        onMouseEnter={e => e.currentTarget.style.borderColor = "var(--bp-blue)"}
+        onMouseLeave={e => e.currentTarget.style.borderColor = "var(--bp-blue-border)"}
       >
-        <span
-          className="text-sm font-extrabold"
-          style={{ color: "var(--bp-blue)" }}
-        >
+        <span className="text-sm font-extrabold" style={{ color: "var(--bp-blue)" }}>
           {protocol || "···"}
         </span>
         <Copy
@@ -182,22 +77,12 @@ function ProtocolBar({ protocol, crmLabel, onCopy }) {
 }
 
 export default function App() {
-  const [sidebarReady, setSidebarReady] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState(null);
-  const [selectedTicket, setSelectedTicket] = useState(null);
+  const [activeTab, setActiveTab]     = useState(null);
 
   const {
-    loading,
-    uploading,
-    protocol,
-    crmLabel,
-    customer,
-    schedule,
-    attachments,
-    error,
-    reload,
-    upload,
+    loading, uploading, protocol, crmLabel,
+    customer, schedule, attachments, error, reload, upload,
   } = useAppData();
 
   const validatorSrc = useMemo(
@@ -205,261 +90,183 @@ export default function App() {
     []
   );
 
-  useEffect(() => {
-    const handleCardClick = (event) => {
-      const cardRoot = findCardElement(event.target);
-      if (!cardRoot) return;
-
-      const ticketId = extractTicketIdFromCard(cardRoot);
-      const title = getTicketDisplayFromCard(cardRoot, ticketId);
-
-      setSelectedTicket({
-        ticketId,
-        title,
-        elementId: cardRoot.id || "",
-      });
-
-      setSidebarReady(true);
-      setSidebarOpen(true);
-      setActiveTab((current) => current || "cliente");
-    };
-
-    document.addEventListener("click", handleCardClick, true);
-
-    return () => {
-      document.removeEventListener("click", handleCardClick, true);
-    };
-  }, []);
-
   const copyProtocol = async () => {
     if (!protocol) return;
-    try {
-      await navigator.clipboard.writeText(protocol);
-    } catch {}
+    try { await navigator.clipboard.writeText(protocol); } catch {}
   };
 
   const handleTabClick = (id) => {
-    if (!sidebarReady) return;
-
-    if (activeTab === id && sidebarOpen) {
-      setSidebarOpen(false);
-      return;
-    }
-
-    setActiveTab(id);
-    setSidebarOpen(true);
+    if (activeTab === id && sidebarOpen) setSidebarOpen(false);
+    else { setActiveTab(id); setSidebarOpen(true); }
   };
 
-  const activeTabMeta = NAV_TABS.find((tab) => tab.id === activeTab);
+  const activeTabMeta = NAV_TABS.find(t => t.id === activeTab);
 
   return (
     <div
-      className="fixed top-0 right-0 z-[2147483647] flex h-dvh pointer-events-none"
-      style={{
-        fontFamily: "'Nunito', sans-serif",
-      }}
+      className="flex h-dvh overflow-hidden"
+      style={{ fontFamily: "'Nunito', sans-serif", background: "var(--bp-surface)" }}
     >
-      {/* ── 1. Slide-out content panel ── */}
+      {/* ── 1. Blip Desk iframe ── */}
+      <div className="relative flex-1 overflow-hidden">
+        <iframe
+          id="blip-desk"
+          title="Blip Desk"
+          src={appConfig.deskUrl}
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-top-navigation allow-pointer-lock allow-popups-to-escape-sandbox allow-storage-access-by-user-activation"
+          allow="camera; microphone; notifications; clipboard; cookies; geolocation; midi; encrypted-media; autoplay; vr; xr-spatial-tracking; accelerometer; gyroscope; magnetometer; payment; usb; sync-xhr; fullscreen; display-capture"
+          className="h-full w-full bg-white"
+        />
+      </div>
+
+      {/* ── 2. Slide-out content panel ── */}
       <div
-        className="pointer-events-auto flex-shrink-0 overflow-hidden transition-all duration-250 ease-in-out"
+        className="flex-shrink-0 overflow-hidden transition-all duration-250 ease-in-out"
         style={{
-          width: sidebarReady && sidebarOpen ? "var(--panel-w)" : "0px",
-          borderLeft:
-            sidebarReady && sidebarOpen ? "1px solid var(--bp-border)" : "none",
+          width: sidebarOpen ? "var(--panel-w)" : "0px",
+          borderLeft: sidebarOpen ? "1px solid var(--bp-border)" : "none",
         }}
       >
-        {sidebarReady && sidebarOpen && activeTabMeta && (
+        {sidebarOpen && activeTabMeta && (
           <div
             key={activeTab}
             className="panel-animate flex flex-col h-dvh overflow-hidden"
-            style={{
-              width: "var(--panel-w)",
-              background: "var(--bp-white)",
-              boxShadow: "0 0 24px rgba(0, 0, 0, 0.08)",
-            }}
+            style={{ width: "var(--panel-w)", background: "var(--bp-white)" }}
           >
             {/* Panel title row */}
             <div
-              className="flex-shrink-0 px-4 py-3"
+              className="flex-shrink-0 flex items-center gap-2.5 px-4 py-3"
               style={{ borderBottom: "1px solid var(--bp-border)" }}
             >
-              <div className="flex items-center gap-2.5">
-                <activeTabMeta.Icon
-                  style={{
-                    width: 16,
-                    height: 16,
-                    color: "var(--bp-blue)",
-                    flexShrink: 0,
-                  }}
-                />
-                <span
-                  className="text-sm font-bold flex-1"
-                  style={{ color: "var(--bp-onix)" }}
-                >
-                  {activeTabMeta.label}
-                </span>
-              </div>
-
-              {selectedTicket && (
-                <div className="mt-2 min-w-0">
-                  <div
-                    className="text-[10px] font-bold uppercase tracking-wider"
-                    style={{ color: "var(--bp-gray)" }}
-                  >
-                    Card selecionado
-                  </div>
-                  <div
-                    className="text-xs font-semibold truncate"
-                    style={{ color: "var(--bp-onix)" }}
-                    title={selectedTicket.title || selectedTicket.ticketId || ""}
-                  >
-                    {selectedTicket.title || "Card sem título"}
-                  </div>
-                  {selectedTicket.ticketId && (
-                    <div
-                      className="text-[11px] mt-0.5"
-                      style={{ color: "var(--bp-blue)" }}
-                    >
-                      Ticket #{selectedTicket.ticketId}
-                    </div>
-                  )}
-                </div>
-              )}
+              <activeTabMeta.Icon
+                style={{ width: 16, height: 16, color: "var(--bp-blue)", flexShrink: 0 }}
+              />
+              <span className="text-sm font-bold flex-1" style={{ color: "var(--bp-onix)" }}>
+                {activeTabMeta.label}
+              </span>
             </div>
 
+            {/* Protocol bar — always visible */}
             <ProtocolBar
               protocol={protocol}
               crmLabel={crmLabel}
               onCopy={copyProtocol}
             />
 
+            {/* Error */}
             {error && (
               <div
                 className="mx-3 mt-2 rounded-lg px-3 py-2 text-xs font-semibold flex-shrink-0"
-                style={{
-                  background: "#fff5f4",
-                  border: "1px solid #fcc",
-                  color: "var(--bp-warning)",
-                }}
+                style={{ background: "#fff5f4", border: "1px solid #fcc", color: "var(--bp-warning)" }}
               >
                 {error}
               </div>
             )}
 
-            <div
-              className="flex-1 overflow-hidden"
-              style={{ background: "var(--bp-surface)" }}
-            >
-              {activeTab === "validador" && (
-                <ValidatorPanel src={validatorSrc} title="Validador" />
-              )}
-
-              {activeTab === "cliente" && <CustomerPanel customer={customer} />}
-
-              {activeTab === "anexo" && (
-                <AttachmentPanel
-                  attachments={attachments}
-                  onUpload={upload}
-                  uploading={uploading}
-                />
-              )}
-
-              {activeTab === "agendamento" && (
-                <SchedulingPanel protocol={protocol} schedule={schedule} />
-              )}
+            {/* Panel content */}
+            <div className="flex-1 overflow-hidden" style={{ background: "var(--bp-surface)" }}>
+              {activeTab === "validador"   && <ValidatorPanel src={validatorSrc} title="Validador" />}
+              {activeTab === "cliente"     && <CustomerPanel customer={customer} />}
+              {activeTab === "anexo"       && <AttachmentPanel attachments={attachments} onUpload={upload} uploading={uploading} />}
+              {activeTab === "agendamento" && <SchedulingPanel protocol={protocol} schedule={schedule} />}
             </div>
           </div>
         )}
       </div>
 
-      {/* ── 2. Icon nav bar ── */}
-      {sidebarReady && (
-        <nav
-          className="pointer-events-auto relative z-20 flex flex-col items-center gap-1 flex-shrink-0 py-2"
-          style={{
-            width: "var(--nav-w)",
-            background: "var(--bp-white)",
-            borderLeft: "1px solid var(--bp-border)",
-            boxShadow: "0 0 24px rgba(0, 0, 0, 0.08)",
-          }}
+      {/* ── 3. Icon nav bar ── */}
+      <nav
+        className="relative z-20 flex flex-col items-center gap-1 flex-shrink-0 py-2"
+        style={{
+          width: "var(--nav-w)",
+          background: "var(--bp-white)",
+          borderLeft: "1px solid var(--bp-border)",
+        }}
+      >
+        {/* Reload at top */}
+        <button
+          data-tooltip="Recarregar"
+          onClick={reload}
+          className="flex h-9 w-9 items-center justify-center rounded-xl transition-all mt-1 mb-1"
+          style={{ color: "var(--bp-gray)" }}
+          onMouseEnter={e => { e.currentTarget.style.background = "var(--bp-surface)"; e.currentTarget.style.color = "var(--bp-blue)"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--bp-gray)"; }}
         >
-          <button
-            data-tooltip="Recarregar"
-            onClick={reload}
-            className="flex h-9 w-9 items-center justify-center rounded-xl transition-all mt-1 mb-1"
-            style={{ color: "var(--bp-gray)" }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "var(--bp-surface)";
-              e.currentTarget.style.color = "var(--bp-blue)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "transparent";
-              e.currentTarget.style.color = "var(--bp-gray)";
-            }}
-          >
-            <RefreshCcw
-              style={{ width: 15, height: 15 }}
-              className={loading ? "animate-spin" : ""}
-            />
-          </button>
-
-          <div
-            style={{
-              width: 28,
-              height: 1,
-              background: "var(--bp-border)",
-              marginBottom: 4,
-            }}
+          <RefreshCcw
+            style={{ width: 15, height: 15 }}
+            className={loading ? "animate-spin" : ""}
           />
+        </button>
 
-          {NAV_TABS.map(({ id, label, Icon }) => {
-            const isActive = sidebarOpen && activeTab === id;
+        {/* Divider */}
+        <div style={{ width: 28, height: 1, background: "var(--bp-border)", marginBottom: 4 }} />
 
-            return (
-              <button
-                key={id}
-                data-tooltip={label}
-                onClick={() => handleTabClick(id)}
-                className="relative flex items-center justify-center rounded-xl transition-all"
-                style={{
-                  width: 40,
-                  height: 40,
-                  background: isActive ? "var(--bp-blue-bg)" : "transparent",
-                  color: isActive ? "var(--bp-blue)" : "var(--bp-gray)",
-                  flexShrink: 0,
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = "var(--bp-surface)";
-                    e.currentTarget.style.color = "var(--bp-blue)";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = "transparent";
-                    e.currentTarget.style.color = "var(--bp-gray)";
-                  }
-                }}
-              >
-                {isActive && (
-                  <span
-                    className="absolute rounded-full"
-                    style={{
-                      left: -1,
-                      top: "25%",
-                      bottom: "25%",
-                      width: 3,
-                      background: "var(--bp-blue)",
-                    }}
-                  />
-                )}
+        {/* Tab icon buttons */}
+        {NAV_TABS.map(({ id, label, Icon }) => {
+          const isActive = sidebarOpen && activeTab === id;
+          return (
+            <button
+              key={id}
+              data-tooltip={label}
+              onClick={() => handleTabClick(id)}
+              className="relative flex items-center justify-center rounded-xl transition-all"
+              style={{
+                width: 40,
+                height: 40,
+                background: isActive ? "var(--bp-blue-bg)" : "transparent",
+                color: isActive ? "var(--bp-blue)" : "var(--bp-gray)",
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => {
+                if (!isActive) {
+                  e.currentTarget.style.background = "var(--bp-surface)";
+                  e.currentTarget.style.color = "var(--bp-blue)";
+                }
+              }}
+              onMouseLeave={e => {
+                if (!isActive) {
+                  e.currentTarget.style.background = "transparent";
+                  e.currentTarget.style.color = "var(--bp-gray)";
+                }
+              }}
+            >
+              {/* Active left indicator */}
+              {isActive && (
+                <span
+                  className="absolute rounded-full"
+                  style={{
+                    left: -1,
+                    top: "25%",
+                    bottom: "25%",
+                    width: 3,
+                    background: "var(--bp-blue)",
+                    borderRadius: "0 3px 3px 0",
+                  }}
+                />
+              )}
+              <Icon style={{ width: 18, height: 18 }} />
+            </button>
+          );
+        })}
 
-                <Icon style={{ width: 17, height: 17 }} />
-              </button>
-            );
-          })}
-        </nav>
-      )}
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Collapse toggle */}
+        <button
+          data-tooltip={sidebarOpen ? "Recolher" : "Expandir"}
+          onClick={() => setSidebarOpen(v => !v)}
+          className="flex h-9 w-9 items-center justify-center rounded-xl transition-all mb-1"
+          style={{ color: "var(--bp-gray)" }}
+          onMouseEnter={e => { e.currentTarget.style.background = "var(--bp-surface)"; e.currentTarget.style.color = "var(--bp-blue)"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--bp-gray)"; }}
+        >
+          {sidebarOpen
+            ? <ChevronRight style={{ width: 16, height: 16 }} />
+            : <ChevronLeft  style={{ width: 16, height: 16 }} />
+          }
+        </button>
+      </nav>
     </div>
   );
 }
