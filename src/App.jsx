@@ -1,13 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ShieldCheck,
-  Contact,
-  Paperclip,
-  CalendarClock,
-  Copy,
-  ExternalLink,
-  RefreshCcw,
-  ChevronRight,
+  ShieldCheck, Contact, Paperclip, CalendarClock,
+  Copy, ExternalLink, RefreshCcw, ChevronRight,
 } from "lucide-react";
 import CustomerPanel   from "./components/CustomerPanel";
 import AttachmentPanel from "./components/AttachmentPanel";
@@ -63,6 +57,7 @@ export default function App() {
   const [ticketOpen, setTicketOpen]   = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab]     = useState(null);
+  const lastTicketIdRef               = useRef(null);
 
   const { loading, uploading, protocol, crmLabel, customer, schedule, attachments, error, reload, upload } = useAppData();
 
@@ -70,12 +65,54 @@ export default function App() {
     () => buildUrl(appConfig.validator.baseUrl, appConfig.validator.params), []
   );
 
+  // Extrai o UUID do ticket da URL do iframe
+  // URL do Blip Desk muda para /{uuid} ao abrir um ticket (SPA)
+  const getIframeTicketId = useCallback(() => {
+    try {
+      const iframe = document.getElementById("blip-desk");
+      const href = iframe?.contentWindow?.location?.href ?? "";
+      const match = href.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+      return match ? match[0] : null;
+    } catch {
+      // cross-origin — não conseguimos ler a URL diretamente
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
-    const handler = (event) => {
+    // ── Estratégia 1: polling da URL do iframe (SPA) ──────────────────
+    // O Blip Desk muda a URL ao selecionar um ticket.
+    // Se o app rodar no mesmo domínio (*.desk.blip.ai), isso funciona.
+    const poll = setInterval(() => {
+      const id = getIframeTicketId();
+      if (id && id !== lastTicketIdRef.current) {
+        lastTicketIdRef.current = id;
+        setTicketOpen(true);
+        reload();
+      }
+    }, 500);
+
+    // ── Estratégia 2: window blur ─────────────────────────────────────
+    // Quando o usuário clica dentro do iframe o foco sai do window.
+    // Combinamos com um pequeno delay para dar tempo da URL do SPA mudar.
+    const onBlur = () => {
+      if (document.activeElement?.tagName !== "IFRAME") return;
+      setTimeout(() => {
+        const id = getIframeTicketId();
+        if (id && id !== lastTicketIdRef.current) {
+          lastTicketIdRef.current = id;
+          setTicketOpen(true);
+          reload();
+        }
+      }, 300);
+    };
+
+    // ── Estratégia 3: postMessage do Blip Desk ────────────────────────
+    // Caso o Desk emita eventos nativos de navegação/seleção.
+    const onMessage = (event) => {
       try {
         const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
         if (!data || typeof data !== "object") return;
-
         const isTicket =
           data.action === "ticket-selected"       ||
           data.action === "conversation-selected" ||
@@ -84,17 +121,22 @@ export default function App() {
           !!data.ticketId || !!data.ticket        ||
           !!data.attendanceId || !!data.threadId  ||
           !!data.conversationId;
-
         if (isTicket) {
           setTicketOpen(true);
-          reload(); // recarrega dados a cada troca de card
+          reload();
         }
       } catch {}
     };
 
-    window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
-  }, [reload]);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("message", onMessage);
+
+    return () => {
+      clearInterval(poll);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("message", onMessage);
+    };
+  }, [getIframeTicketId, reload]);
 
   const copyProtocol = async () => {
     if (!protocol) return;
@@ -112,7 +154,7 @@ export default function App() {
     <div className="flex h-dvh overflow-hidden"
       style={{ fontFamily: "'Nunito', sans-serif", background: "var(--bp-surface)" }}>
 
-      {/* ── 1. Blip Desk iframe — ocupa tudo ── */}
+      {/* ── 1. Blip Desk iframe ── */}
       <div className="relative flex-1 overflow-hidden">
         <iframe
           id="blip-desk"
@@ -163,7 +205,7 @@ export default function App() {
         )}
       </div>
 
-      {/* ── 3. Navbar — só renderiza após o primeiro ticket ser aberto ── */}
+      {/* ── 3. Navbar — aparece ao primeiro ticket ── */}
       {ticketOpen && (
         <nav
           className="relative z-20 flex flex-col items-center gap-1 flex-shrink-0 py-2"
