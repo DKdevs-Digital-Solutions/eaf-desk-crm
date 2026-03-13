@@ -65,26 +65,66 @@ export default function App() {
     () => buildUrl(appConfig.validator.baseUrl, appConfig.validator.params), []
   );
 
-  // Escuta postMessage do Blip Desk para detectar ticket selecionado
+  // Detecta seleção de card no Blip Desk via postMessage
+  // O Blip Desk é um SPA — quando o usuário clica num ticket, a URL muda
+  // para /{uuid} e o Desk emite postMessage com o ticket selecionado.
+  // Também escutamos via iframe src para detectar navegação interna.
   useEffect(() => {
-    const handler = (event) => {
+    // Estratégia 1: postMessage do Blip Desk
+    // O hook.js da extensão DKdevs mostra que o Desk emite mensagens com __blipExt
+    // mas o Desk nativo também emite eventos de navegação/seleção de ticket
+    const messageHandler = (event) => {
       try {
         const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-        // Blip Desk emite evento quando um ticket/conversa é aberto
-        if (
-          data?.action === "ticket-selected" ||
-          data?.action === "conversation-selected" ||
-          data?.type === "ticket-selected" ||
-          data?.eventName === "ticket-selected" ||
-          data?.ticket || data?.attendanceId || data?.threadId
-        ) {
+        if (!data || typeof data !== "object") return;
+
+        // Eventos conhecidos do Blip Desk SPA
+        const isTicketEvent =
+          data.action === "ticket-selected" ||
+          data.action === "conversation-selected" ||
+          data.type   === "ticket-selected" ||
+          data.eventName === "ticket-selected" ||
+          // navegação interna do Desk (hashchange / pushState via postMessage)
+          (data.url && /\/[0-9a-f-]{36}/i.test(String(data.url))) ||
+          // ticket ID presente em qualquer campo
+          data.ticketId || data.ticket?.id || data.attendanceId ||
+          data.threadId || data.conversationId;
+
+        if (isTicketEvent) {
           setTicketSelected(true);
           reload();
         }
       } catch {}
     };
-    window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
+
+    // Estratégia 2: polling da URL do iframe
+    // O Blip Desk é um SPA — a URL muda quando um ticket é aberto
+    // ex: https://xxx.desk.blip.ai/attendance/{uuid}
+    let lastIframeSrc = "";
+    const pollInterval = setInterval(() => {
+      try {
+        const iframe = document.getElementById("blip-desk");
+        if (!iframe) return;
+        // contentWindow.location pode lançar erro por cross-origin — usamos try/catch
+        const src = iframe.contentWindow?.location?.href || "";
+        if (src && src !== lastIframeSrc) {
+          lastIframeSrc = src;
+          // URL contém UUID → ticket foi aberto
+          if (/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(src)) {
+            setTicketSelected(true);
+            reload();
+          }
+        }
+      } catch {
+        // cross-origin: não conseguimos ler a URL — ignorar
+      }
+    }, 600);
+
+    window.addEventListener("message", messageHandler);
+    return () => {
+      window.removeEventListener("message", messageHandler);
+      clearInterval(pollInterval);
+    };
   }, [reload]);
 
   const copyProtocol = async () => {
@@ -117,6 +157,7 @@ export default function App() {
           allow="camera; microphone; notifications; clipboard; cookies; geolocation; midi; encrypted-media; autoplay; vr; xr-spatial-tracking; accelerometer; gyroscope; magnetometer; payment; usb; sync-xhr; fullscreen; display-capture"
           className="h-full w-full bg-white"
         />
+
       </div>
 
       {/* ── 2. Nav bar — só aparece após selecionar um ticket ── */}
