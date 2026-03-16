@@ -14,7 +14,7 @@ import CustomerPanel from "./components/CustomerPanel";
 import AttachmentPanel from "./components/AttachmentPanel";
 import SchedulingPanel from "./components/SchedulingPanel";
 import ValidatorPanel from "./components/ValidatorPanel";
-import { appConfig, buildUrl } from "./services/config";
+import { appConfig, buildValidatorUrl } from "./services/config";
 import { useAppData } from "./hooks/useAppData";
 
 const NAV_TABS = [
@@ -86,7 +86,10 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(null);
 
-  const {
+    const [selectedIdentity, setSelectedIdentity] = useState("");
+  const [selectedContact, setSelectedContact] = useState(null);
+
+    const {
     loading,
     uploading,
     protocol,
@@ -94,14 +97,19 @@ export default function App() {
     customer,
     schedule,
     attachments,
+    operatorEmail,
     error,
     reload,
     upload,
-  } = useAppData();
+  } = useAppData(selectedIdentity, selectedContact);
 
-  const validatorSrc = useMemo(
-    () => buildUrl(appConfig.validator.baseUrl, appConfig.validator.params),
-    []
+    const validatorSrc = useMemo(
+    () =>
+      buildValidatorUrl({
+        cpf: customer?.cpf,
+        emailOperador: operatorEmail || selectedContact?.emailOperador || "",
+      }),
+    [customer?.cpf, operatorEmail, selectedContact]
   );
 
   const copyProtocol = async () => {
@@ -153,6 +161,31 @@ export default function App() {
     },
     [reload]
   );
+
+    useEffect(() => {
+    const handleDeskMessage = (event) => {
+      const data = event?.data;
+      if (!data || typeof data !== "object") return;
+      if (data.source !== "desk-contact-bridge") return;
+
+      setSelectedIdentity(String(data.identity || "").trim());
+      setSelectedContact({
+        identity: String(data.identity || "").trim(),
+        cpf: String(data.cpf || "").trim(),
+        nome: String(data.nome || "").trim(),
+        email: String(data.email || "").trim(),
+        telefone: String(data.telefone || "").trim(),
+        emailOperador: String(data.emailOperador || "").trim(),
+      });
+
+      setNavVisible(true);
+      setSidebarOpen(true);
+      setActiveTab((prev) => prev ?? "cliente");
+    };
+
+    window.addEventListener("message", handleDeskMessage);
+    return () => window.removeEventListener("message", handleDeskMessage);
+  }, []);
 
   useEffect(() => {
     const iframe = iframeRef.current;
