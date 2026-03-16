@@ -85,11 +85,10 @@ export default function App() {
   const [navVisible, setNavVisible] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(null);
-
-    const [selectedIdentity, setSelectedIdentity] = useState("");
+  const [selectedIdentity, setSelectedIdentity] = useState("");
   const [selectedContact, setSelectedContact] = useState(null);
 
-    const {
+  const {
     loading,
     uploading,
     protocol,
@@ -103,7 +102,7 @@ export default function App() {
     upload,
   } = useAppData(selectedIdentity, selectedContact);
 
-    const validatorSrc = useMemo(
+  const validatorSrc = useMemo(
     () =>
       buildValidatorUrl({
         cpf: customer?.cpf,
@@ -133,50 +132,328 @@ export default function App() {
 
   const activeTabMeta = NAV_TABS.find((t) => t.id === activeTab);
 
-  const handleArticleSelection = useCallback(
-    async (article) => {
-      if (!article) return;
+  const handleArticleSelection = useCallback((article) => {
+    if (!article) return;
 
-      const articleId =
-        article.getAttribute("id") ||
-        article.getAttribute("aria-label") ||
-        article.dataset.ticketId ||
-        null;
+    const articleId =
+      article.getAttribute("id") ||
+      article.getAttribute("aria-label") ||
+      article.dataset.ticketId ||
+      null;
 
-      if (!articleId) return;
+    if (!articleId) return;
 
-      const isSameArticle = lastArticleIdRef.current === articleId;
+    lastArticleIdRef.current = articleId;
 
-      lastArticleIdRef.current = articleId;
+    setNavVisible(true);
+    setSidebarOpen(true);
+    setActiveTab((prev) => prev ?? "cliente");
+  }, []);
 
-      setNavVisible(true);
-      setSidebarOpen(true);
-      setActiveTab((prev) => prev ?? "cliente");
+  const injectDeskBridge = useCallback((iframe) => {
+    try {
+      const iframeWin = iframe?.contentWindow;
+      const iframeDoc = iframe?.contentDocument || iframeWin?.document;
 
-      if (!isSameArticle) {
-        try {
-          await reload();
-        } catch {}
-      }
-    },
-    [reload]
-  );
+      if (!iframeWin || !iframeDoc) return;
+      if (iframeWin.__deskBridgeInjected) return;
 
-    useEffect(() => {
+      iframeWin.__deskBridgeInjected = true;
+
+      iframeWin.eval(`
+        (function () {
+          if (window.__deskContactBridgeLoaded) return;
+          window.__deskContactBridgeLoaded = true;
+
+          function safeParse(value) {
+            try { return JSON.parse(value); } catch { return null; }
+          }
+
+          function getAgentEmail() {
+            try {
+              const ajs = safeParse(localStorage.getItem("ajs_user_traits") || "{}");
+              if (ajs && ajs.email) return String(ajs.email).trim();
+            } catch {}
+
+            try {
+              const auth = safeParse(localStorage.getItem("auth") || "{}");
+              if (auth && auth.user && auth.user.email) return String(auth.user.email).trim();
+            } catch {}
+
+            try {
+              const user = safeParse(localStorage.getItem("user") || "{}");
+              if (user && user.email) return String(user.email).trim();
+            } catch {}
+
+            return "";
+          }
+
+          function emitContact(payload) {
+            if (!payload) return;
+
+            window.parent.postMessage(
+              {
+                source: "desk-contact-bridge",
+                identity: payload.identity || "",
+                cpf: payload.cpf || "",
+                nome: payload.nome || "",
+                email: payload.email || "",
+                telefone: payload.telefone || "",
+                emailOperador: getAgentEmail(),
+              },
+              "*"
+            );
+          }
+
+          function normalizeContact(raw) {
+            if (!raw || typeof raw !== "object") return null;
+
+            const normalized = {
+              identity:
+                raw.identity ||
+                raw.customerIdentity ||
+                raw.contactIdentity ||
+                raw.address ||
+                raw.customer?.identity ||
+                raw.contact?.identity ||
+                "",
+              cpf:
+                raw.taxDocument ||
+                raw.document ||
+                raw.cpf ||
+                raw.customer?.taxDocument ||
+                raw.contact?.taxDocument ||
+                "",
+              nome:
+                raw.name ||
+                raw.fullName ||
+                raw.customer?.name ||
+                raw.contact?.name ||
+                "",
+              email:
+                raw.email ||
+                raw.customer?.email ||
+                raw.contact?.email ||
+                "",
+              telefone:
+                raw.phoneNumber ||
+                raw.phone ||
+                raw.mobilePhone ||
+                raw.customer?.phoneNumber ||
+                raw.contact?.phoneNumber ||
+                ""
+            };
+
+            if (!normalized.identity && !normalized.cpf) return null;
+            return normalized;
+          }
+
+          function extractCandidatesFromAny(data) {
+            const out = [];
+            if (!data) return out;
+
+            if (Array.isArray(data)) {
+              for (const item of data) out.push(item);
+              return out;
+            }
+
+            if (typeof data === "object") {
+              out.push(data);
+
+              const commonKeys = [
+                "resource",
+                "item",
+                "items",
+                "result",
+                "results",
+                "data",
+                "contact",
+                "customer",
+                "ticket",
+                "tickets",
+                "attendant",
+                "attendants",
+                "visitor",
+                "client"
+              ];
+
+              for (const key of commonKeys) {
+                if (data[key]) {
+                  if (Array.isArray(data[key])) out.push(...data[key]);
+                  else out.push(data[key]);
+                }
+              }
+            }
+
+            return out;
+          }
+
+          function tryEmitFromUnknown(data) {
+            const candidates = extractCandidatesFromAny(data);
+
+            for (const candidate of candidates) {
+              const parsed = normalizeContact(candidate);
+              if (parsed) {
+                emitContact(parsed);
+                return true;
+              }
+            }
+
+            return false;
+          }
+
+          function tryFromGlobals() {
+            const candidates = [
+              window.currentTicket,
+              window.ticket,
+              window.selectedTicket,
+              window.currentContact,
+              window.contact,
+              window.currentCustomer,
+              window.customer,
+              window.__NEXT_DATA__,
+              window.store?.getState?.(),
+              window.reduxStore?.getState?.()
+            ];
+
+            for (const item of candidates) {
+              if (tryEmitFromUnknown(item)) {
+                return true;
+              }
+            }
+
+            return false;
+          }
+
+          function tryFromArticles() {
+            const articles = Array.from(document.querySelectorAll("article"));
+
+            for (const article of articles) {
+              const datasets = [
+                article.dataset,
+                article.__reactProps,
+                article.__reactFiber,
+              ];
+
+              for (const item of datasets) {
+                if (tryEmitFromUnknown(item)) {
+                  return true;
+                }
+              }
+            }
+
+            return false;
+          }
+
+          const originalFetch = window.fetch;
+          if (typeof originalFetch === "function") {
+            window.fetch = async function (...args) {
+              const response = await originalFetch.apply(this, args);
+
+              try {
+                const requestUrl = String(args?.[0]?.url || args?.[0] || "");
+
+                if (
+                  requestUrl.includes("ticket") ||
+                  requestUrl.includes("tickets") ||
+                  requestUrl.includes("contact") ||
+                  requestUrl.includes("contacts") ||
+                  requestUrl.includes("customer") ||
+                  requestUrl.includes("customers") ||
+                  requestUrl.includes("attendant") ||
+                  requestUrl.includes("chat")
+                ) {
+                  response.clone().text().then((text) => {
+                    try {
+                      const data = JSON.parse(text);
+                      tryEmitFromUnknown(data);
+                    } catch {}
+                  }).catch(() => {});
+                }
+              } catch {}
+
+              return response;
+            };
+          }
+
+          const OriginalXHR = window.XMLHttpRequest;
+          if (OriginalXHR && !window.__deskBridgeXHRWrapped) {
+            window.__deskBridgeXHRWrapped = true;
+
+            const originalOpen = OriginalXHR.prototype.open;
+            const originalSend = OriginalXHR.prototype.send;
+
+            OriginalXHR.prototype.open = function (method, url) {
+              this.__bridgeUrl = url;
+              return originalOpen.apply(this, arguments);
+            };
+
+            OriginalXHR.prototype.send = function () {
+              this.addEventListener("load", function () {
+                try {
+                  const requestUrl = String(this.__bridgeUrl || "");
+                  if (
+                    requestUrl.includes("ticket") ||
+                    requestUrl.includes("tickets") ||
+                    requestUrl.includes("contact") ||
+                    requestUrl.includes("contacts") ||
+                    requestUrl.includes("customer") ||
+                    requestUrl.includes("customers") ||
+                    requestUrl.includes("attendant") ||
+                    requestUrl.includes("chat")
+                  ) {
+                    const text = this.responseText;
+                    if (text) {
+                      try {
+                        const data = JSON.parse(text);
+                        tryEmitFromUnknown(data);
+                      } catch {}
+                    }
+                  }
+                } catch {}
+              });
+
+              return originalSend.apply(this, arguments);
+            };
+          }
+
+          tryFromGlobals();
+          tryFromArticles();
+
+          const observer = new MutationObserver(() => {
+            tryFromGlobals();
+            tryFromArticles();
+          });
+
+          observer.observe(document.documentElement || document.body, {
+            subtree: true,
+            childList: true
+          });
+        })();
+      `);
+    } catch (err) {
+      console.error("Falha ao injetar bridge no Desk:", err);
+    }
+  }, []);
+
+  useEffect(() => {
     const handleDeskMessage = (event) => {
       const data = event?.data;
       if (!data || typeof data !== "object") return;
       if (data.source !== "desk-contact-bridge") return;
 
-      setSelectedIdentity(String(data.identity || "").trim());
-      setSelectedContact({
-        identity: String(data.identity || "").trim(),
+      const nextIdentity = String(data.identity || "").trim();
+      const nextContact = {
+        identity: nextIdentity,
         cpf: String(data.cpf || "").trim(),
         nome: String(data.nome || "").trim(),
         email: String(data.email || "").trim(),
         telefone: String(data.telefone || "").trim(),
         emailOperador: String(data.emailOperador || "").trim(),
-      });
+      };
+
+      setSelectedIdentity(nextIdentity);
+      setSelectedContact(nextContact);
 
       setNavVisible(true);
       setSidebarOpen(true);
@@ -194,9 +471,7 @@ export default function App() {
     let cleanupFns = [];
 
     const attachArticleListeners = () => {
-      const iframeDoc =
-        iframe.contentDocument || iframe.contentWindow?.document;
-
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
       if (!iframeDoc) return;
 
       const articles = iframeDoc.querySelectorAll("article.ticket-list-item");
@@ -220,11 +495,10 @@ export default function App() {
     };
 
     const onLoad = () => {
-      const iframeDoc =
-        iframe.contentDocument || iframe.contentWindow?.document;
-
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
       if (!iframeDoc) return;
 
+      injectDeskBridge(iframe);
       attachArticleListeners();
 
       if (observerRef.current) {
@@ -235,10 +509,12 @@ export default function App() {
         attachArticleListeners();
       });
 
-      observerRef.current.observe(iframeDoc.body, {
-        childList: true,
-        subtree: true,
-      });
+      if (iframeDoc.body) {
+        observerRef.current.observe(iframeDoc.body, {
+          childList: true,
+          subtree: true,
+        });
+      }
     };
 
     iframe.addEventListener("load", onLoad);
@@ -257,7 +533,7 @@ export default function App() {
         observerRef.current = null;
       }
     };
-  }, [handleArticleSelection]);
+  }, [handleArticleSelection, injectDeskBridge]);
 
   return (
     <div
@@ -267,7 +543,6 @@ export default function App() {
         background: "var(--bp-surface)",
       }}
     >
-      {/* ── 1. Blip Desk iframe ── */}
       <div className="relative flex-1 overflow-hidden">
         <iframe
           ref={iframeRef}
@@ -280,7 +555,6 @@ export default function App() {
         />
       </div>
 
-      {/* ── 2. Slide-out content panel ── */}
       {navVisible && (
         <div
           className="flex-shrink-0 overflow-hidden transition-all duration-250 ease-in-out"
@@ -361,7 +635,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ── 3. Icon nav bar ── */}
       {navVisible && (
         <nav
           className="relative z-20 flex flex-col items-center gap-1 flex-shrink-0 py-2"
